@@ -1,0 +1,34 @@
+{
+  "pushPlusToken": "",
+  "user": [
+    {
+      "username": "账号1",
+      "password": "xxxx",
+      "pushPlusToken": "",
+      "location": {
+        "adcode": "420111",
+        "address": "位置1",
+        "lng": "京都",
+        "lat": "唯独"
+      },
+      "reason": "签到描述",
+      "startDate": "2023-07-05",
+      "endDate": "2023-07-31"
+    },
+    {
+      "username": "账号2",
+      "password": "xxxx",
+      "pushPlusToken": "",
+      "location": {
+        "adcode": "420111",
+        "address": "位置1",
+        "lng": "京都",
+        "lat": "唯独"
+      },
+      "reason": "签到描述",
+      "startDate": "2023-07-05",
+      "endDate": "2023-07-31"
+    }
+  ]
+}
+
