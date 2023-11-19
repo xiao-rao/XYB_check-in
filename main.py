@@ -23,11 +23,12 @@ urls = {
     'sign': 'https://app.xybsyw.com/behavior/Duration.action',
     'autoSign': 'https://xcx.xybsyw.com/student/clock/Post!autoClock.action',
     'newSign': 'https://xcx.xybsyw.com/student/clock/PostNew.action',
-    'updateSign': 'https://xcx.xybsyw.com/student/clock/PostNew!updateClock.action',
+    # 'updateSign': 'https://xcx.xybsyw.com/student/clock/PostNew!updateClock.action',
+    'updateSign': 'https://xcx.xybsyw.com/student/clock/Post!updateClock.action',
     'status': 'https://xcx.xybsyw.com/student/clock/GetPlan!detail.action'
 }
 
-host1 = 'xcx.xybsyw.com'
+host = 'xcx.xybsyw.com'
 
 
 def getTimeStr():
@@ -84,7 +85,7 @@ def sign_header(data: dict, noce=None, now_time: int = None) -> dict:
         "t": str(now_time),
         "s": "_".join([str(i) for i in noce]),
         "m": sign.hexdigest(),
-        "v": "1.7.14"
+        "v": "1.6.36"
     }
 
 
@@ -117,7 +118,7 @@ def getuser(userInfo):
 # 登录获取sessionId和loginerId
 def login(userInfo):
     data = getuser(userInfo)
-    headers = getHeader(host1)
+    headers = getHeader(host)
     url = urls['login']
     resp = requests.post(url=url, headers=headers, data=data).json()
     if '200' == resp['code']:
@@ -135,14 +136,20 @@ def login(userInfo):
 
 # 获取trainID
 def getTrainID(sessionId):
-    headers = getHeader(host1)
+    headers = getHeader(host)
     headers['cookie'] = f'JSESSIONID={sessionId}'
     url = urls['trainId']
     resp = requests.post(url=url, headers=headers).json()
     if '200' == resp['code']:
-        ret = resp['data']['clockVo']['traineeId']
+        clockVo = resp['data'].get('clockVo')
+        if not clockVo:
+            log("该账号实习已结束！！")
+            return False, False
+        ret = clockVo['traineeId']
+        moduleName = clockVo['moduleName']
         log(f'traineeId:{ret}')
-        return ret, resp['data']['clockVo']['moduleName']
+        log(f'moduleName:{moduleName}')
+        return ret, moduleName
     else:
         log(resp['msg'])
         return False, False
@@ -150,7 +157,7 @@ def getTrainID(sessionId):
 
 # 获取姓名
 def getUsername(sessionId):
-    headers = getHeader(host1)
+    headers = getHeader(host)
     headers['cookie'] = f'JSESSIONID={sessionId}'
     url = urls['loadAccount']
     resp = requests.post(url=url, headers=headers).json()
@@ -164,7 +171,7 @@ def getUsername(sessionId):
 
 # 获取ip
 def getIP(sessionId):
-    headers = getHeader(host1)
+    headers = getHeader(host)
     headers['cookie'] = f'JSESSIONID={sessionId}'
     url = urls['ip']
     resp = requests.post(url=url, headers=headers).json()
@@ -178,13 +185,14 @@ def getIP(sessionId):
 
 # 获取经纬度\签到地址
 def getPosition(sessionId, trainId):
-    headers = getHeader(host1)
+    headers = getHeader(host)
     headers['cookie'] = f'JSESSIONID={sessionId}'
     url = urls['status']
     data = {
         'traineeId': trainId
     }
     resp = requests.post(url=url, headers=headers, data=data).json()
+    # print(resp)
     if '200' == resp['code']:
         postInfo = resp['data']['postInfo']
         address = postInfo['address']
@@ -198,28 +206,43 @@ def getPosition(sessionId, trainId):
 
 
 # 执行签到
-def autoSign(sessionId, data):
-    headers = getHeader(host1)
+def autoSign(sessionId, data, signHeader):
+    headers = getHeader(host)
+    headers.update(signHeader)
     headers['cookie'] = f'JSESSIONID={sessionId}'
     url = urls['autoSign']
     resp = requests.post(url=url, headers=headers, data=data).json()
+    print(resp)
     log(resp['msg'])
     return resp['msg']
 
 
 # 签退
 def newSign(sessionId, data, signHeader):
-    headers = getHeader(host1)
+    headers = getHeader(host)
     headers.update(signHeader)
     headers['cookie'] = f'JSESSIONID={sessionId}'
     url = urls['newSign']
     resp = requests.post(url=url, headers=headers, data=data).json()
+    print(resp)
+    return resp['msg']
+
+
+# 更新签到记录
+def updateSign(sessionId, data, signHeader):
+    headers = getHeader(host)
+    headers.update(signHeader)
+    headers['cookie'] = f'JSESSIONID={sessionId}'
+    url = urls['updateSign']
+    resp = requests.post(url=url, headers=headers, data=data).json()
+    print(resp)
+    log(resp['msg'])
     return resp['msg']
 
 
 # 获取签到状态
 def getSignStatus(sessionId, trainId):
-    headers = getHeader(host1)
+    headers = getHeader(host)
     headers['cookie'] = f'JSESSIONID={sessionId}'
     url = urls['status']
     data = {'traineeId': trainId}
@@ -237,10 +260,10 @@ def signHandler(userInfo, sence):
     if not train_id or not moduleName:
         return
     address, lng, lat = getPosition(sessionId, train_id)
-    if "集中" in moduleName:
-        lng = userInfo['location']['lng']
-        lat = userInfo['location']['lat']
-        address = userInfo['location']['address']
+    # if "集中" in moduleName:
+    #     lng = userInfo['location']['lng']
+    #     lat = userInfo['location']['lat']
+    #     address = userInfo['location']['address']
     signFormData = {
         'traineeId': train_id,
         'adcode': userInfo['location']['adcode'],
@@ -251,22 +274,25 @@ def signHandler(userInfo, sence):
         'punchInStatus': '1',
         'clockStatus': sence,
         'imgUrl': '',
-        'reason': userInfo['reason']
+        'reason': userInfo['reason'],
     }
+    # print(signFormData)
     is_sign_in, is_sign_out = getSignStatus(sessionId, train_id)
     if sence == 2:
         if is_sign_in:
-            log("已经进行过签到，本次操作未进行...")
-            pushMessge(userInfo['pushPlusToken'], '已经进行过签到，本次操作未进行...')
-            msg.append(f'账号 {userInfo["username"]} 已经进行过签到，本次操作未进行...')
+            log_msg = updateSign(sessionId, signFormData, sign_header(signFormData))
+            log("已经进行过签到，本次操作将更新打卡时间...")
+            pushMessge(userInfo['pushPlusToken'], f'已经进行过签到，本次操作将更新打卡时间...\n{log_msg}')
+            msg.append(f'账号 {userInfo["username"]} 已经进行过签到，本次操作将更新打卡时间...\n{log_msg}')
         elif is_sign_out:
             log('已签退，无法进行签到!')
-            pushMessge(userInfo['pushPlusToken'], '已签退，无法进行签到!')
+            pushMessge(userInfo['pushPlusToken'], '已签退，无法进行签到! ')
             msg.append(f'账号 {userInfo["username"]} 已签退，无法进行签到!')
         else:
-            autoSign(sessionId, signFormData)
-            pushMessge(userInfo['pushPlusToken'], '签到完成！！')
-            msg.append(f'账号 {userInfo["username"]} 签到完成')
+            log("签到完成！...")
+            log_msg = newSign(sessionId, signFormData, sign_header(signFormData))
+            pushMessge(userInfo['pushPlusToken'], f'签到完成！！\n{log_msg}')
+            msg.append(f'账号 {userInfo["username"]} 签到完成 \n{log_msg}')
     else:
         if is_sign_in:
             if is_sign_out:
@@ -274,10 +300,10 @@ def signHandler(userInfo, sence):
                 pushMessge(userInfo['pushPlusToken'], "已经进行过签退，本次操作未进行...")
                 msg.append(f'账号 {userInfo["username"]} 已经进行过签退，本次操作未进行...')
             else:
-                newSign(sessionId, signFormData, sign_header(signFormData))
+                log_msg = newSign(sessionId, signFormData, sign_header(signFormData))
                 log("签退完成！！")
-                pushMessge(userInfo['pushPlusToken'], '签退完成！！')
-                msg.append(f'账号 {userInfo["username"]} 签退完成')
+                pushMessge(userInfo['pushPlusToken'], f'签退完成！！\n{log_msg}')
+                msg.append(f'账号 {userInfo["username"]} 签退完成 \n{log_msg}')
         else:
             log("无法进行签退，必须先进行签到操作")
             pushMessge(userInfo['pushPlusToken'], '无法进行签退，必须先进行签到操作')
@@ -341,8 +367,9 @@ if __name__ == '__main__':
     elif args.sign_out:
         sence = 1
     else:
+        sence = 2
         log("输入命令有误！")
-        exit(-1)
+        # exit(-1)
     for user in users['user']:
         log(f"执行 {user['username']} 签到/签退任务")
         now = str(datetime.today().date())
